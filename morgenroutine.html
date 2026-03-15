@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Morgenroutine">
+<title>RCP Morgenroutine</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c26;
+    --border: #2a2a3a;
+    --accent: #4f8ef7;
+    --accent2: #7c6af7;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --font: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; padding-bottom: 40px; }
+
+  /* HEADER */
+  .header { padding: 52px 20px 16px; background: linear-gradient(180deg, #0d0d18 0%, transparent 100%); }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .header h1 span { color: var(--accent); }
+  .date-badge { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; color: var(--muted); }
+  .refresh-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--accent); font-size: 16px; }
+
+  /* SUMMARY STRIP */
+  .summary { display: flex; gap: 8px; padding: 12px 20px; overflow-x: auto; scrollbar-width: none; }
+  .summary::-webkit-scrollbar { display: none; }
+  .sum-card { flex: 0 0 auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; min-width: 80px; text-align: center; }
+  .sum-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .sum-val { font-size: 20px; font-weight: 700; }
+  .sum-val.green { color: var(--green); }
+  .sum-val.red { color: var(--red); }
+  .sum-val.yellow { color: var(--yellow); }
+  .sum-val.neutral { color: var(--text); }
+
+  /* SECTION */
+  .section { margin: 16px 20px 0; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .section-badge { font-size: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 2px 8px; color: var(--muted); }
+  .auto-badge { color: var(--green); border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.08); }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
+  .card + .card { margin-top: 8px; }
+
+  /* TICKER ROW */
+  .ticker-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ticker-row:last-child { border-bottom: none; }
+  .ticker-name { font-size: 13px; color: var(--text); font-weight: 500; }
+  .ticker-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .ticker-vals { display: flex; gap: 8px; align-items: center; }
+  .ticker-price { font-size: 15px; font-weight: 700; }
+  .ticker-change { font-size: 12px; padding: 2px 7px; border-radius: 8px; font-weight: 600; }
+  .ticker-change.up { background: rgba(34,197,94,0.15); color: var(--green); }
+  .ticker-change.down { background: rgba(239,68,68,0.15); color: var(--red); }
+  .loading-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); display: inline-block; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }
+
+  /* MANUAL INPUT */
+  .field-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .field-row:last-child { border-bottom: none; }
+  .field-label { font-size: 13px; color: var(--text); }
+  .field-label small { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .field-right { display: flex; align-items: center; gap: 8px; }
+  .field-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; font-weight: 600; padding: 6px 10px; width: 90px; text-align: right; outline: none; -webkit-appearance: none; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-select { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; padding: 6px 10px; outline: none; -webkit-appearance: none; min-width: 90px; text-align: right; }
+  .src-link { font-size: 11px; color: var(--accent); text-decoration: none; }
+
+  /* MA TABLE */
+  .ma-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ma-table th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 0 4px 8px; text-align: right; font-weight: 500; }
+  .ma-table th:first-child { text-align: left; }
+  .ma-table td { padding: 6px 4px; border-top: 1px solid var(--border); }
+  .ma-table td:first-child { color: var(--text); }
+  .ma-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-weight: 600; padding: 4px 6px; width: 60px; text-align: right; outline: none; -webkit-appearance: none; }
+  .ma-input:focus { border-color: var(--accent); }
+  .ma-input.pos { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.3); color: var(--green); }
+  .ma-input.neg { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: var(--red); }
+
+  /* DIST */
+  .dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dist-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; }
+  .dist-label { font-size: 13px; font-weight: 600; }
+  .dist-counter { display: flex; align-items: center; gap: 6px; }
+  .dist-btn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .dist-val { font-size: 20px; font-weight: 700; min-width: 24px; text-align: center; }
+  .dist-val.warn { color: var(--yellow); }
+  .dist-val.danger { color: var(--red); }
+
+  /* SIGNALS */
+  .signals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .signal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; }
+  .signal-box-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px; }
+  .signal-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); gap: 6px; }
+  .signal-item:last-child { border-bottom: none; }
+  .signal-label { font-size: 11px; color: var(--text); line-height: 1.3; flex: 1; }
+  .sig-toggle { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }
+  .sig-btn { font-size: 10px; padding: 4px 7px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-weight: 600; }
+  .sig-btn.ja.active { background: rgba(239,68,68,0.2); color: var(--red); }
+  .sig-btn.nein.active { background: rgba(34,197,94,0.15); color: var(--green); }
+
+  /* FG METER */
+  .fg-meter { margin: 12px 0 4px; }
+  .fg-bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #ef4444 0%, #f59e0b 25%, #22c55e 50%, #f59e0b 75%, #ef4444 100%); position: relative; }
+  .fg-pointer { position: absolute; top: -3px; width: 14px; height: 14px; border-radius: 50%; background: white; border: 2px solid var(--bg); transform: translateX(-50%); transition: left 0.5s ease; }
+  .fg-labels { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10px; color: var(--muted); }
+
+  /* SAVE */
+  .save-section { margin: 20px; }
+  .save-btn { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 14px; font-size: 16px; font-weight: 700; cursor: pointer; letter-spacing: -0.2px; }
+  .save-btn:active { opacity: 0.85; transform: scale(0.99); }
+  .save-note { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--green); color: white; padding: 12px 24px; border-radius: 30px; font-size: 14px; font-weight: 600; opacity: 0; transition: all 0.3s; pointer-events: none; z-index: 999; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* VOL section */
+  .vol-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .vol-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center; }
+  .vol-card-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .vol-card-val { font-size: 22px; font-weight: 700; }
+
+  /* UP/DOWN VOL */
+  .udv-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; font-size: 12px; }
+  .udv-header { color: var(--muted); padding: 4px; text-align: right; font-size: 11px; }
+  .udv-header:first-child { text-align: left; }
+  .udv-cell { padding: 4px; text-align: right; }
+  .udv-label { color: var(--text); }
+  .udv-input { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; font-weight: 600; padding: 4px 6px; width: 70px; text-align: right; outline: none; -webkit-appearance: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="date-badge" id="dateBadge"></div>
+      <h1 style="margin-top:8px">RCP <span>Morgen</span>routine</h1>
+    </div>
+    <button class="refresh-btn" onclick="loadAutoData()" title="Aktualisieren">↻</button>
+  </div>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary">
+  <div class="sum-card"><div class="sum-label">VIX</div><div class="sum-val neutral" id="s-vix">—</div></div>
+  <div class="sum-card"><div class="sum-label">SKEW</div><div class="sum-val neutral" id="s-skew">—</div></div>
+  <div class="sum-card"><div class="sum-label">F&G</div><div class="sum-val neutral" id="s-fg">—</div></div>
+  <div class="sum-card"><div class="sum-label">PCR</div><div class="sum-val neutral" id="s-pcr">—</div></div>
+  <div class="sum-card"><div class="sum-label">Panik</div><div class="sum-val green" id="s-panik">0</div></div>
+  <div class="sum-card"><div class="sum-label">Dist.</div><div class="sum-val neutral" id="s-dist">0</div></div>
+</div>
+
+<!-- VOLATILITÄT AUTO -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Volatilität</div>
+    <span class="section-badge auto-badge">AUTO</span>
+  </div>
+  <div class="card">
+    <div class="vol-grid">
+      <div class="vol-card">
+        <div class="vol-card-label">VIX</div>
+        <div class="vol-card-val" id="vix-val"><span class="loading-dot"></span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px" id="vix-chg"></div>
+      </div>
+      <div class="vol-card">
+        <div class="vol-card-label">SKEW</div>
+        <div class="vol-card-val" id="skew-val"><span class="loading-dot"></span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px" id="skew-chg"></div>
+      </div>
+    </div>
+    <div class="field-row" style="margin-top:10px">
+      <div class="field-label">VVIX EoD/max<small>manuell</small></div>
+      <input class="field-input" type="text" id="vvix" placeholder="0/0" style="width:90px" oninput="saveLocal()">
+    </div>
+  </div>
+</div>
+
+<!-- FEAR & GREED AUTO -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Fear & Greed Index</div>
+    <span class="section-badge auto-badge">AUTO</span>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:36px;font-weight:800;letter-spacing:-1px" id="fg-val">—</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px" id="fg-label">Wird geladen…</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--muted)">Grenze</div>
+        <div style="font-size:13px;margin-top:2px">unter 10: <span style="color:var(--green)">Chance</span></div>
+        <div style="font-size:13px">über 80: <span style="color:var(--red)">Vorsicht</span></div>
+      </div>
+    </div>
+    <div class="fg-meter">
+      <div class="fg-bar"><div class="fg-pointer" id="fg-ptr" style="left:50%"></div></div>
+      <div class="fg-labels"><span>Extreme Fear</span><span>Neutral</span><span>Extreme Greed</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- MA AUTO -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">21er Moving Averages</div>
+    <span class="section-badge auto-badge">AUTO</span>
+  </div>
+  <div class="card">
+    <table class="ma-table">
+      <thead><tr><th>Index</th><th style="text-align:right">DLY</th><th style="text-align:right">WKLY</th></tr></thead>
+      <tbody id="maAutoBody"></tbody>
+    </table>
+    <div style="margin-top:8px;font-size:10px;color:var(--muted)">Abstand zum 21-Perioden-MA in %</div>
+  </div>
+</div>
+
+<!-- AD LINE MANUELL -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Advance Decline Line</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="src-link" href="https://stockcharts.com/freecharts/gallery.html?$NYAD" target="_blank">daily ↗</a>
+      <a class="src-link" href="https://stockcharts.com/freecharts/gallery.html?$NYAD,W" target="_blank">weekly ↗</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="field-row">
+      <div class="field-label">NYSE Daily</div>
+      <select class="field-select" id="ad-daily" onchange="saveLocal()">
+        <option value="">—</option>
+        <option value="up">↑ up</option>
+        <option value="down">↓ down</option>
+        <option value="sideways">→ seitwärts</option>
+      </select>
+    </div>
+    <div class="field-row">
+      <div class="field-label">NYSE Weekly</div>
+      <select class="field-select" id="ad-weekly" onchange="saveLocal()">
+        <option value="">—</option>
+        <option value="up">↑ up</option>
+        <option value="down">↓ down</option>
+        <option value="sideways">→ seitwärts</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- PCR MANUELL -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Put-Call-Ratio</div>
+    <a class="src-link" href="https://www.cboe.com/us/options/market_statistics/daily/" target="_blank">cboe.com ↗</a>
+  </div>
+  <div class="card">
+    <div class="field-row">
+      <div class="field-label">PCR intraday max</div>
+      <input class="field-input" type="number" step="0.01" id="pcr-intra" placeholder="0.00" oninput="saveLocal()">
+    </div>
+    <div class="field-row">
+      <div class="field-label">PCR EoD</div>
+      <input class="field-input" type="number" step="0.01" id="pcr-eod" placeholder="0.00" oninput="updateSummary();saveLocal()">
+    </div>
+  </div>
+</div>
+
+<!-- UP DOWN VOL MANUELL -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Up / Down Volume</div>
+    <a class="src-link" href="https://www.barchart.com/stocks/market-statistics/up-down-volume" target="_blank">barchart.com ↗</a>
+  </div>
+  <div class="card">
+    <div class="udv-grid">
+      <div class="udv-header">—</div><div class="udv-header">NYSE</div><div class="udv-header">NASDAQ</div>
+      <div class="udv-cell udv-label">Up Vol %</div>
+      <div class="udv-cell"><input class="udv-input" type="number" step="0.01" id="upvol-nyse" placeholder="0.00" oninput="saveLocal()"></div>
+      <div class="udv-cell"><input class="udv-input" type="number" step="0.01" id="upvol-ndx" placeholder="0.00" oninput="saveLocal()"></div>
+      <div class="udv-cell udv-label">Down Vol %</div>
+      <div class="udv-cell"><input class="udv-input" type="number" step="0.01" id="dnvol-nyse" placeholder="0.00" oninput="saveLocal()"></div>
+      <div class="udv-cell"><input class="udv-input" type="number" step="0.01" id="dnvol-ndx" placeholder="0.00" oninput="saveLocal()"></div>
+    </div>
+  </div>
+</div>
+
+<!-- NH NL MANUELL -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Neue Hochs / Neue Tiefs</div>
+  </div>
+  <div class="card">
+    <div class="udv-grid">
+      <div class="udv-header">—</div><div class="udv-header">New High</div><div class="udv-header">New Low</div>
+      <div class="udv-cell udv-label">NYSE</div>
+      <div class="udv-cell"><input class="udv-input" type="number" id="nh-nyse" placeholder="0" oninput="saveLocal()"></div>
+      <div class="udv-cell"><input class="udv-input" type="number" id="nl-nyse" placeholder="0" oninput="saveLocal()"></div>
+      <div class="udv-cell udv-label">NASDAQ</div>
+      <div class="udv-cell"><input class="udv-input" type="number" id="nh-ndx" placeholder="0" oninput="saveLocal()"></div>
+      <div class="udv-cell"><input class="udv-input" type="number" id="nl-ndx" placeholder="0" oninput="saveLocal()"></div>
+    </div>
+  </div>
+</div>
+
+<!-- DISTRIBUTION DAYS -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Distribution Days</div>
+    <span class="section-badge">MANUELL</span>
+  </div>
+  <div class="dist-grid" id="distGrid"></div>
+  <div style="margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;font-size:11px;color:var(--muted);line-height:1.6">
+    Downday ≥0,2% mit steigendem Volumen · fällt nach 5 Wochen (25 Sitzungen) · Cluster = 4 Tage in Folge · Wochenchart über 21er MA
+  </div>
+</div>
+
+<!-- PANIK & HEDGING -->
+<div class="section">
+  <div class="section-header">
+    <div class="section-title">Panik- & Hedgingzeichen</div>
+    <span class="section-badge">MANUELL</span>
+  </div>
+  <div class="signals-grid">
+    <div class="signal-box">
+      <div class="signal-box-title">Panikzeichen</div>
+      <div id="panikBox"></div>
+    </div>
+    <div class="signal-box">
+      <div class="signal-box-title">Hedgingzeichen</div>
+      <div id="hedgingBox"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SAVE -->
+<div class="save-section">
+  <button class="save-btn" onclick="saveAll()">Daten speichern</button>
+  <div class="save-note">Daten werden lokal auf deinem Gerät gespeichert</div>
+</div>
+
+<div class="toast" id="toast">✓ Gespeichert</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────
+const MA_INDICES = [
+  {id:'vix',  label:'VIX',              sym:'^VIX'},
+  {id:'es',   label:'ES – S&P 500',     sym:'^GSPC'},
+  {id:'rut',  label:'RUT – Russell 2000',sym:'^RUT'},
+  {id:'nya',  label:'NYA – NYSE Comp.', sym:'^NYA'},
+  {id:'dji',  label:'DJI – Dow Jones',  sym:'^DJI'},
+  {id:'dtx',  label:'DTX – DJ Transport',sym:'^DJT'},
+  {id:'dux',  label:'DUX – DJ Utilities',sym:'^DJU'},
+  {id:'ndx',  label:'NDX – NASDAQ 100', sym:'^NDX'},
+  {id:'dax',  label:'DAX',              sym:'^GDAXI'},
+  {id:'eu50', label:'EU50 – Euro Stoxx',sym:'^STOXX50E'},
+  {id:'ewg',  label:'EWG – DAX ETF',    sym:'EWG'},
+];
+
+const PANIK = [
+  'VIX fällt vom Hoch 3 Pkt?',
+  'VVIX > 140?',
+  'P/C Ratio > 1,40?',
+  '90% Tag up/down?',
+  'nh/nL 1:100',
+  'NYSE > 1000 Tiefs',
+];
+
+const HEDGING = [
+  'VIX niedrig SKEW fällt',
+  '90% Tage',
+  'Markt steigt VIX steigt',
+  'Divergenz AD Line',
+  'CNN Fear Greed > 80',
+];
+
+const DIST_ITEMS = ['ES','DJI','NDX','RUT'];
+
+// ── STATE ────────────────────────────────────────────────
+let state = {
+  vvix:'', adDaily:'', adWeekly:'',
+  pcrIntra:'', pcrEod:'',
+  upvolNyse:'', upvolNdx:'', dnvolNyse:'', dnvolNdx:'',
+  nhNyse:'', nlNyse:'', nhNdx:'', nlNdx:'',
+  dist:{ES:0, DJI:0, NDX:0, RUT:0},
+  maManual:{},
+  panik:{}, hedging:{},
+  autoData:{}
+};
+
+// ── INIT ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  setDate();
+  buildMATable();
+  buildDist();
+  buildSignals();
+  loadLocal();
+  loadAutoData();
+});
+
+function setDate() {
+  const d = new Date();
+  const opts = {weekday:'long', day:'2-digit', month:'long', year:'numeric'};
+  document.getElementById('dateBadge').textContent = d.toLocaleDateString('de-DE', opts);
+}
+
+// ── BUILD UI ─────────────────────────────────────────────
+function buildMATable() {
+  const autoBody = document.getElementById('maAutoBody');
+  MA_INDICES.forEach(idx => {
+    const ar = document.createElement('tr');
+    ar.innerHTML = `
+      <td><div style="font-size:12px;font-weight:500">${idx.label}</div></td>
+      <td style="text-align:right" id="ma-dly-${idx.id}"><span class="loading-dot"></span></td>
+      <td style="text-align:right" id="ma-wkly-${idx.id}"><span class="loading-dot"></span></td>`;
+    autoBody.appendChild(ar);
+  });
+}
+
+function renderMACell(id, pct) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const sign = pct >= 0 ? '+' : '';
+  const color = pct >= 0 ? 'var(--green)' : 'var(--red)';
+  const bg = pct >= 0 ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)';
+  el.innerHTML = `<span style="font-size:12px;font-weight:700;padding:3px 7px;border-radius:6px;background:${bg};color:${color}">${sign}${pct.toFixed(1)}</span>`;
+}
+
+function calcSMA(closes, period) {
+  if (closes.length < period) return null;
+  const slice = closes.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
+function buildDist() {
+  const grid = document.getElementById('distGrid');
+  DIST_ITEMS.forEach(name => {
+    const div = document.createElement('div');
+    div.className = 'dist-item';
+    div.innerHTML = `<div class="dist-label">${name}</div>
+      <div class="dist-counter">
+        <button class="dist-btn" onclick="changeDist('${name}',-1)">−</button>
+        <div class="dist-val" id="dist-${name}">0</div>
+        <button class="dist-btn" onclick="changeDist('${name}',1)">+</button>
+      </div>`;
+    grid.appendChild(div);
+  });
+}
+
+function changeDist(name, delta) {
+  state.dist[name] = Math.max(0, (state.dist[name] || 0) + delta);
+  const el = document.getElementById('dist-' + name);
+  el.textContent = state.dist[name];
+  el.className = 'dist-val' + (state.dist[name] >= 5 ? ' danger' : state.dist[name] >= 3 ? ' warn' : '');
+  updateSummary();
+  saveLocal();
+}
+
+function buildSignals() {
+  buildSignalBox('panikBox', PANIK, 'p');
+  buildSignalBox('hedgingBox', HEDGING, 'h');
+}
+
+function buildSignalBox(containerId, items, prefix) {
+  const box = document.getElementById(containerId);
+  items.forEach((label, i) => {
+    const id = prefix + i;
+    if (!state[prefix === 'p' ? 'panik' : 'hedging'][id]) {
+      state[prefix === 'p' ? 'panik' : 'hedging'][id] = 'nein';
+    }
+    const div = document.createElement('div');
+    div.className = 'signal-item';
+    div.innerHTML = `<div class="signal-label">${label}</div>
+      <div class="sig-toggle">
+        <button class="sig-btn ja" id="${id}-ja" onclick="setSignal('${id}','ja','${prefix}')">ja</button>
+        <button class="sig-btn nein active" id="${id}-nein" onclick="setSignal('${id}','nein','${prefix}')">nein</button>
+      </div>`;
+    box.appendChild(div);
+  });
+}
+
+function setSignal(id, val, prefix) {
+  const key = prefix === 'p' ? 'panik' : 'hedging';
+  state[key][id] = val;
+  document.getElementById(id + '-ja').classList.toggle('active', val === 'ja');
+  document.getElementById(id + '-nein').classList.toggle('active', val === 'nein');
+  updateSummary();
+  saveLocal();
+}
+
+// ── AUTO DATA ────────────────────────────────────────────
+async function loadAutoData() {
+  loadFearGreed();
+  loadYahooFinance();
+}
+
+async function loadFearGreed() {
+  try {
+    const r = await fetch('https://api.alternative.me/fng/');
+    const d = await r.json();
+    const val = parseInt(d.data[0].value);
+    const classification = d.data[0].value_classification;
+    document.getElementById('fg-val').textContent = val;
+    document.getElementById('fg-label').textContent = classification;
+    const el = document.getElementById('fg-val');
+    el.style.color = val <= 25 ? 'var(--red)' : val <= 45 ? 'var(--yellow)' : val >= 75 ? 'var(--red)' : 'var(--green)';
+    document.getElementById('fg-ptr').style.left = val + '%';
+    document.getElementById('s-fg').textContent = val;
+    const s = document.getElementById('s-fg');
+    s.className = 'sum-val ' + (val <= 25 || val >= 75 ? 'red' : val <= 45 ? 'yellow' : 'green');
+  } catch(e) {
+    document.getElementById('fg-val').textContent = '—';
+    document.getElementById('fg-label').textContent = 'Nicht verfügbar';
+  }
+}
+
+async function loadYahooFinance() {
+  // Load VIX + SKEW daily first
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=1d`);
+    const d = await r.json();
+    const price = d.chart.result[0].meta.regularMarketPrice;
+    const prev = d.chart.result[0].meta.chartPreviousClose;
+    const chg = prev ? ((price - prev) / prev * 100) : 0;
+    document.getElementById('s-vix').textContent = price.toFixed(1);
+    document.getElementById('vix-val').textContent = price.toFixed(2);
+    const sign = chg >= 0 ? '+' : '';
+    document.getElementById('vix-chg').textContent = sign + chg.toFixed(1) + '%';
+    document.getElementById('vix-chg').style.color = chg >= 0 ? 'var(--red)' : 'var(--green)';
+  } catch(e) { document.getElementById('vix-val').textContent = '—'; }
+
+  try {
+    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/%5ESKEW?interval=1d&range=1d`);
+    const d = await r.json();
+    const price = d.chart.result[0].meta.regularMarketPrice;
+    document.getElementById('skew-val').textContent = price.toFixed(1);
+    document.getElementById('s-skew').textContent = price.toFixed(0);
+  } catch(e) { document.getElementById('skew-val').textContent = '—'; }
+
+  // Load each index: daily (6mo for 21-day MA) + weekly (2y for 21-week MA)
+  for (const idx of MA_INDICES) {
+    try {
+      const sym = encodeURIComponent(idx.sym);
+
+      // DAILY: 6 months of daily data → 21-day MA
+      const rd = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=6mo`);
+      const dd = await rd.json();
+      const result = dd.chart.result[0];
+      const closesD = result.indicators.quote[0].close.filter(v => v !== null);
+      const currentPrice = result.meta.regularMarketPrice;
+      const sma21d = calcSMA(closesD, 21);
+      if (sma21d && currentPrice) {
+        const pctD = ((currentPrice - sma21d) / sma21d) * 100;
+        renderMACell('ma-dly-' + idx.id, pctD);
+      } else {
+        document.getElementById('ma-dly-' + idx.id).textContent = '—';
+      }
+
+      // WEEKLY: 2 years of weekly data → 21-week MA
+      const rw = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1wk&range=2y`);
+      const dw = await rw.json();
+      const closesW = dw.chart.result[0].indicators.quote[0].close.filter(v => v !== null);
+      const sma21w = calcSMA(closesW, 21);
+      if (sma21w && currentPrice) {
+        const pctW = ((currentPrice - sma21w) / sma21w) * 100;
+        renderMACell('ma-wkly-' + idx.id, pctW);
+      } else {
+        document.getElementById('ma-wkly-' + idx.id).textContent = '—';
+      }
+
+    } catch(e) {
+      const d = document.getElementById('ma-dly-' + idx.id);
+      const w = document.getElementById('ma-wkly-' + idx.id);
+      if (d) d.textContent = '—';
+      if (w) w.textContent = '—';
+    }
+  }
+}
+
+// ── SUMMARY ──────────────────────────────────────────────
+function updateSummary() {
+  const pcr = parseFloat(document.getElementById('pcr-eod').value);
+  if (!isNaN(pcr)) {
+    document.getElementById('s-pcr').textContent = pcr.toFixed(2);
+    document.getElementById('s-pcr').className = 'sum-val ' + (pcr >= 1.4 ? 'red' : pcr >= 1.0 ? 'yellow' : 'green');
+  }
+
+  const panikCount = Object.values(state.panik).filter(v => v === 'ja').length;
+  const panikEl = document.getElementById('s-panik');
+  panikEl.textContent = panikCount;
+  panikEl.className = 'sum-val ' + (panikCount >= 3 ? 'red' : panikCount >= 1 ? 'yellow' : 'green');
+
+  const distTotal = Object.values(state.dist).reduce((a,b) => a+b, 0);
+  const distEl = document.getElementById('s-dist');
+  distEl.textContent = distTotal;
+  distEl.className = 'sum-val ' + (distTotal >= 8 ? 'red' : distTotal >= 4 ? 'yellow' : 'neutral');
+}
+
+// ── SAVE/LOAD ────────────────────────────────────────────
+function saveLocal() {
+  state.vvix = document.getElementById('vvix').value;
+  state.adDaily = document.getElementById('ad-daily').value;
+  state.adWeekly = document.getElementById('ad-weekly').value;
+  state.pcrIntra = document.getElementById('pcr-intra').value;
+  state.pcrEod = document.getElementById('pcr-eod').value;
+  state.upvolNyse = document.getElementById('upvol-nyse').value;
+  state.upvolNdx = document.getElementById('upvol-ndx').value;
+  state.dnvolNyse = document.getElementById('dnvol-nyse').value;
+  state.dnvolNdx = document.getElementById('dnvol-ndx').value;
+  state.nhNyse = document.getElementById('nh-nyse').value;
+  state.nlNyse = document.getElementById('nl-nyse').value;
+  state.nhNdx = document.getElementById('nh-ndx').value;
+  state.nlNdx = document.getElementById('nl-ndx').value;
+  localStorage.setItem('rcp_state', JSON.stringify(state));
+  updateSummary();
+}
+
+function loadLocal() {
+  const saved = localStorage.getItem('rcp_state');
+  if (!saved) return;
+  const s = JSON.parse(saved);
+  Object.assign(state, s);
+  
+  const fields = [
+    ['vvix', state.vvix],
+    ['ad-daily', state.adDaily],
+    ['ad-weekly', state.adWeekly],
+    ['pcr-intra', state.pcrIntra],
+    ['pcr-eod', state.pcrEod],
+    ['upvol-nyse', state.upvolNyse],
+    ['upvol-ndx', state.upvolNdx],
+    ['dnvol-nyse', state.dnvolNyse],
+    ['dnvol-ndx', state.dnvolNdx],
+    ['nh-nyse', state.nhNyse],
+    ['nl-nyse', state.nlNyse],
+    ['nh-ndx', state.nhNdx],
+    ['nl-ndx', state.nlNdx],
+  ];
+  fields.forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el && val !== undefined) el.value = val;
+  });
+
+  // Dist
+  DIST_ITEMS.forEach(name => {
+    if (state.dist[name] !== undefined) {
+      const el = document.getElementById('dist-' + name);
+      if (el) {
+        el.textContent = state.dist[name];
+        el.className = 'dist-val' + (state.dist[name] >= 5 ? ' danger' : state.dist[name] >= 3 ? ' warn' : '');
+      }
+    }
+  });
+
+  // Signals
+  const restoreSignals = (obj, prefix) => {
+    Object.entries(obj).forEach(([id, val]) => {
+      const ja = document.getElementById(id + '-ja');
+      const nein = document.getElementById(id + '-nein');
+      if (ja && nein) {
+        ja.classList.toggle('active', val === 'ja');
+        nein.classList.toggle('active', val === 'nein');
+      }
+    });
+  };
+  restoreSignals(state.panik, 'p');
+  restoreSignals(state.hedging, 'h');
+  updateSummary();
+}
+
+function saveAll() {
+  saveLocal();
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
