@@ -358,17 +358,17 @@
 <script>
 // ── CONFIG ──────────────────────────────────────────────
 const MA_INDICES = [
-  {id:'vix',  label:'VIX',              sym:'^VIX'},
-  {id:'es',   label:'ES – S&P 500',     sym:'^GSPC'},
-  {id:'rut',  label:'RUT – Russell 2000',sym:'^RUT'},
-  {id:'nya',  label:'NYA – NYSE Comp.', sym:'^NYA'},
-  {id:'dji',  label:'DJI – Dow Jones',  sym:'^DJI'},
-  {id:'dtx',  label:'DTX – DJ Transport',sym:'^DJT'},
-  {id:'dux',  label:'DUX – DJ Utilities',sym:'^DJU'},
-  {id:'ndx',  label:'NDX – NASDAQ 100', sym:'^NDX'},
-  {id:'dax',  label:'DAX',              sym:'^GDAXI'},
-  {id:'eu50', label:'EU50 – Euro Stoxx',sym:'^STOXX50E'},
-  {id:'ewg',  label:'EWG – DAX ETF',    sym:'EWG'},
+  {id:'vix',  label:'VIX',               tdSym:'VIX',   tdEx:''},
+  {id:'es',   label:'ES – S&P 500',      tdSym:'SPX',   tdEx:'INDEX'},
+  {id:'rut',  label:'RUT – Russell 2000',tdSym:'RUT',   tdEx:'INDEX'},
+  {id:'nya',  label:'NYA – NYSE Comp.',  tdSym:'NYA',   tdEx:'INDEX'},
+  {id:'dji',  label:'DJI – Dow Jones',   tdSym:'DJIA',  tdEx:'INDEX'},
+  {id:'dtx',  label:'DTX – DJ Transport',tdSym:'DJT',   tdEx:'INDEX'},
+  {id:'dux',  label:'DUX – DJ Utilities',tdSym:'UTIL',  tdEx:'INDEX'},
+  {id:'ndx',  label:'NDX – NASDAQ 100',  tdSym:'NDX',   tdEx:'INDEX'},
+  {id:'dax',  label:'DAX',               tdSym:'DAX',   tdEx:'INDEX'},
+  {id:'eu50', label:'EU50 – Euro Stoxx', tdSym:'SX5E',  tdEx:'INDEX'},
+  {id:'ewg',  label:'EWG – DAX ETF',     tdSym:'EWG',   tdEx:'NYSE'},
 ];
 
 const PANIK = [
@@ -503,9 +503,17 @@ function setSignal(id, val, prefix) {
 }
 
 // ── AUTO DATA ────────────────────────────────────────────
+const TD_KEY = '4b0583ba337b411a9f81ffadfda66976';
+const TD = 'https://api.twelvedata.com';
+
+function getWeekKey() {
+  const d = new Date();
+  return 'rcp_week_' + d.getFullYear() + '_' + Math.floor((d - new Date(d.getFullYear(),0,1)) / 604800000);
+}
+
 async function loadAutoData() {
   loadFearGreed();
-  loadYahooFinance();
+  loadTwelveData();
 }
 
 async function loadFearGreed() {
@@ -516,78 +524,119 @@ async function loadFearGreed() {
     const classification = d.data[0].value_classification;
     document.getElementById('fg-val').textContent = val;
     document.getElementById('fg-label').textContent = classification;
-    const el = document.getElementById('fg-val');
-    el.style.color = val <= 25 ? 'var(--red)' : val <= 45 ? 'var(--yellow)' : val >= 75 ? 'var(--red)' : 'var(--green)';
+    document.getElementById('fg-val').style.color = val <= 25 ? 'var(--red)' : val <= 45 ? 'var(--yellow)' : val >= 75 ? 'var(--red)' : 'var(--green)';
     document.getElementById('fg-ptr').style.left = val + '%';
     document.getElementById('s-fg').textContent = val;
-    const s = document.getElementById('s-fg');
-    s.className = 'sum-val ' + (val <= 25 || val >= 75 ? 'red' : val <= 45 ? 'yellow' : 'green');
+    document.getElementById('s-fg').className = 'sum-val ' + (val <= 25 || val >= 75 ? 'red' : val <= 45 ? 'yellow' : 'green');
   } catch(e) {
     document.getElementById('fg-val').textContent = '—';
     document.getElementById('fg-label').textContent = 'Nicht verfügbar';
   }
 }
 
-async function loadYahooFinance() {
-  // Load VIX + SKEW daily first
-  try {
-    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=1d`);
-    const d = await r.json();
-    const price = d.chart.result[0].meta.regularMarketPrice;
-    const prev = d.chart.result[0].meta.chartPreviousClose;
-    const chg = prev ? ((price - prev) / prev * 100) : 0;
-    document.getElementById('s-vix').textContent = price.toFixed(1);
-    document.getElementById('vix-val').textContent = price.toFixed(2);
-    const sign = chg >= 0 ? '+' : '';
-    document.getElementById('vix-chg').textContent = sign + chg.toFixed(1) + '%';
-    document.getElementById('vix-chg').style.color = chg >= 0 ? 'var(--red)' : 'var(--green)';
-  } catch(e) { document.getElementById('vix-val').textContent = '—'; }
+async function loadTwelveData() {
+  // Alle Symbole auf einmal holen (1 Batch-Request für Tagespreise)
+  const symbols = MA_INDICES.map(i => i.tdSym).join(',');
 
+  // 1) Aktuelle Preise – 1 Request für alle
   try {
-    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/%5ESKEW?interval=1d&range=1d`);
-    const d = await r.json();
-    const price = d.chart.result[0].meta.regularMarketPrice;
-    document.getElementById('skew-val').textContent = price.toFixed(1);
-    document.getElementById('s-skew').textContent = price.toFixed(0);
-  } catch(e) { document.getElementById('skew-val').textContent = '—'; }
+    const r = await fetch(`${TD}/price?symbol=${symbols}&apikey=${TD_KEY}`);
+    const prices = await r.json();
 
-  // Load each index: daily (6mo for 21-day MA) + weekly (2y for 21-week MA)
-  for (const idx of MA_INDICES) {
+    // VIX Sonderbehandlung für Summary
+    if (prices['VIX'] && prices['VIX'].price) {
+      const p = parseFloat(prices['VIX'].price);
+      document.getElementById('s-vix').textContent = p.toFixed(1);
+      document.getElementById('vix-val').textContent = p.toFixed(2);
+    }
+
+    // SKEW separat
     try {
-      const sym = encodeURIComponent(idx.sym);
-
-      // DAILY: 6 months of daily data → 21-day MA
-      const rd = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=6mo`);
-      const dd = await rd.json();
-      const result = dd.chart.result[0];
-      const closesD = result.indicators.quote[0].close.filter(v => v !== null);
-      const currentPrice = result.meta.regularMarketPrice;
-      const sma21d = calcSMA(closesD, 21);
-      if (sma21d && currentPrice) {
-        const pctD = ((currentPrice - sma21d) / sma21d) * 100;
-        renderMACell('ma-dly-' + idx.id, pctD);
-      } else {
-        document.getElementById('ma-dly-' + idx.id).textContent = '—';
+      const rs = await fetch(`${TD}/price?symbol=SKEW&apikey=${TD_KEY}`);
+      const ds = await rs.json();
+      if (ds.price) {
+        const p = parseFloat(ds.price);
+        document.getElementById('skew-val').textContent = p.toFixed(1);
+        document.getElementById('s-skew').textContent = p.toFixed(0);
       }
+    } catch(e) { document.getElementById('skew-val').textContent = '—'; }
 
-      // WEEKLY: 2 years of weekly data → 21-week MA
-      const rw = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1wk&range=2y`);
-      const dw = await rw.json();
-      const closesW = dw.chart.result[0].indicators.quote[0].close.filter(v => v !== null);
-      const sma21w = calcSMA(closesW, 21);
-      if (sma21w && currentPrice) {
-        const pctW = ((currentPrice - sma21w) / sma21w) * 100;
-        renderMACell('ma-wkly-' + idx.id, pctW);
-      } else {
+    // 2) 21-Tage MA: eine Batch-Anfrage für alle (time_series)
+    // TwelveData erlaubt batch time_series nur einzeln im Free Plan
+    // Stattdessen: SMA endpoint – 1 Request pro Index aber parallel
+    const weekKey = getWeekKey();
+    let weekCache = null;
+    try { weekCache = JSON.parse(localStorage.getItem(weekKey)); } catch(e) {}
+
+    const dailyPromises = MA_INDICES.map(async idx => {
+      try {
+        // Tages-SMA(21)
+        const exParam = idx.tdEx ? `&exchange=${idx.tdEx}` : '';
+        const rd = await fetch(`${TD}/sma?symbol=${idx.tdSym}${exParam}&interval=1day&time_period=21&outputsize=1&apikey=${TD_KEY}`);
+        const dd = await rd.json();
+
+        let currentPrice = null;
+        if (prices[idx.tdSym] && prices[idx.tdSym].price) {
+          currentPrice = parseFloat(prices[idx.tdSym].price);
+        } else if (prices.price && MA_INDICES.length === 1) {
+          currentPrice = parseFloat(prices.price);
+        }
+
+        if (dd.values && dd.values[0] && currentPrice) {
+          const sma = parseFloat(dd.values[0].sma);
+          const pct = ((currentPrice - sma) / sma) * 100;
+          renderMACell('ma-dly-' + idx.id, pct);
+        } else {
+          document.getElementById('ma-dly-' + idx.id).textContent = '—';
+        }
+
+        // Wochen-SMA(21) aus Cache oder neu laden
+        if (weekCache && weekCache[idx.id] !== undefined) {
+          renderMACell('ma-wkly-' + idx.id, weekCache[idx.id]);
+        } else {
+          const rw = await fetch(`${TD}/sma?symbol=${idx.tdSym}${exParam}&interval=1week&time_period=21&outputsize=1&apikey=${TD_KEY}`);
+          const dw = await rw.json();
+          if (dw.values && dw.values[0] && currentPrice) {
+            const smaW = parseFloat(dw.values[0].sma);
+            const pctW = ((currentPrice - smaW) / smaW) * 100;
+            renderMACell('ma-wkly-' + idx.id, pctW);
+            if (!weekCache) weekCache = {};
+            weekCache[idx.id] = pctW;
+          } else {
+            document.getElementById('ma-wkly-' + idx.id).textContent = '—';
+          }
+        }
+
+        // VIX Tagesveränderung
+        if (idx.id === 'vix' && currentPrice) {
+          try {
+            const rq = await fetch(`${TD}/quote?symbol=VIX&apikey=${TD_KEY}`);
+            const dq = await rq.json();
+            if (dq.previous_close) {
+              const prev = parseFloat(dq.previous_close);
+              const chg = ((currentPrice - prev) / prev * 100);
+              document.getElementById('vix-chg').textContent = (chg>=0?'+':'') + chg.toFixed(1) + '%';
+              document.getElementById('vix-chg').style.color = chg >= 0 ? 'var(--red)' : 'var(--green)';
+            }
+          } catch(e) {}
+        }
+
+      } catch(e) {
+        document.getElementById('ma-dly-' + idx.id).textContent = '—';
         document.getElementById('ma-wkly-' + idx.id).textContent = '—';
       }
+    });
 
-    } catch(e) {
+    await Promise.all(dailyPromises);
+    if (weekCache) localStorage.setItem(weekKey, JSON.stringify(weekCache));
+
+  } catch(e) {
+    MA_INDICES.forEach(idx => {
       const d = document.getElementById('ma-dly-' + idx.id);
       const w = document.getElementById('ma-wkly-' + idx.id);
       if (d) d.textContent = '—';
       if (w) w.textContent = '—';
-    }
+    });
   }
 }
 
