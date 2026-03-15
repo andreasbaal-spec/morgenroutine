@@ -358,17 +358,17 @@
 <script>
 // ── CONFIG ──────────────────────────────────────────────
 const MA_INDICES = [
-  {id:'vix',  label:'VIX',               tdSym:'VIX',   tdEx:''},
-  {id:'es',   label:'ES – S&P 500',      tdSym:'SPX',   tdEx:'INDEX'},
-  {id:'rut',  label:'RUT – Russell 2000',tdSym:'RUT',   tdEx:'INDEX'},
-  {id:'nya',  label:'NYA – NYSE Comp.',  tdSym:'NYA',   tdEx:'INDEX'},
-  {id:'dji',  label:'DJI – Dow Jones',   tdSym:'DJIA',  tdEx:'INDEX'},
-  {id:'dtx',  label:'DTX – DJ Transport',tdSym:'DJT',   tdEx:'INDEX'},
-  {id:'dux',  label:'DUX – DJ Utilities',tdSym:'UTIL',  tdEx:'INDEX'},
-  {id:'ndx',  label:'NDX – NASDAQ 100',  tdSym:'NDX',   tdEx:'INDEX'},
-  {id:'dax',  label:'DAX',               tdSym:'DAX',   tdEx:'INDEX'},
-  {id:'eu50', label:'EU50 – Euro Stoxx', tdSym:'SX5E',  tdEx:'INDEX'},
-  {id:'ewg',  label:'EWG – DAX ETF',     tdSym:'EWG',   tdEx:'NYSE'},
+  {id:'vix',  label:'VIX',               fhSym:'VIX'},
+  {id:'es',   label:'ES – S&P 500',      fhSym:'SPX'},
+  {id:'rut',  label:'RUT – Russell 2000',fhSym:'RUT'},
+  {id:'nya',  label:'NYA – NYSE Comp.',  fhSym:'NYA'},
+  {id:'dji',  label:'DJI – Dow Jones',   fhSym:'DJIA'},
+  {id:'dtx',  label:'DTX – DJ Transport',fhSym:'DJT'},
+  {id:'dux',  label:'DUX – DJ Utilities',fhSym:'DJU'},
+  {id:'ndx',  label:'NDX – NASDAQ 100',  fhSym:'NDX'},
+  {id:'dax',  label:'DAX',               fhSym:'DAX'},
+  {id:'eu50', label:'EU50 – Euro Stoxx', fhSym:'SX5E'},
+  {id:'ewg',  label:'EWG – DAX ETF',     fhSym:'EWG'},
 ];
 
 const PANIK = [
@@ -503,8 +503,8 @@ function setSignal(id, val, prefix) {
 }
 
 // ── AUTO DATA ────────────────────────────────────────────
-const TD_KEY = '4b0583ba337b411a9f81ffadfda66976';
-const TD = 'https://api.twelvedata.com';
+const FH_KEY = 'd6r9cj1r01qgdhqdn25gd6r9cj1r01qgdhqdn260';
+const FH = 'https://finnhub.io/api/v1';
 
 function getWeekKey() {
   const d = new Date();
@@ -513,7 +513,7 @@ function getWeekKey() {
 
 async function loadAutoData() {
   loadFearGreed();
-  loadTwelveData();
+  loadFinnhub();
 }
 
 async function loadFearGreed() {
@@ -534,110 +534,100 @@ async function loadFearGreed() {
   }
 }
 
-async function loadTwelveData() {
-  // Alle Symbole auf einmal holen (1 Batch-Request für Tagespreise)
-  const symbols = MA_INDICES.map(i => i.tdSym).join(',');
+async function fhFetch(endpoint) {
+  const sep = endpoint.includes('?') ? '&' : '?';
+  const r = await fetch(`${FH}${endpoint}${sep}token=${FH_KEY}`);
+  return r.json();
+}
 
-  // 1) Aktuelle Preise – 1 Request für alle
-  try {
-    const r = await fetch(`${TD}/price?symbol=${symbols}&apikey=${TD_KEY}`);
-    const prices = await r.json();
+function calcSMA(arr, period) {
+  if (arr.length < period) return null;
+  const slice = arr.slice(-period);
+  return slice.reduce((a,b) => a+b, 0) / period;
+}
 
-    // VIX Sonderbehandlung für Summary
-    if (prices['VIX'] && prices['VIX'].price) {
-      const p = parseFloat(prices['VIX'].price);
-      document.getElementById('s-vix').textContent = p.toFixed(1);
-      document.getElementById('vix-val').textContent = p.toFixed(2);
-    }
+async function loadFinnhub() {
+  const weekKey = getWeekKey();
+  let weekCache = null;
+  try { weekCache = JSON.parse(localStorage.getItem(weekKey)); } catch(e) {}
 
-    // SKEW separat
+  // Alle Indizes parallel laden
+  const promises = MA_INDICES.map(async idx => {
     try {
-      const rs = await fetch(`${TD}/price?symbol=SKEW&apikey=${TD_KEY}`);
-      const ds = await rs.json();
-      if (ds.price) {
-        const p = parseFloat(ds.price);
-        document.getElementById('skew-val').textContent = p.toFixed(1);
-        document.getElementById('s-skew').textContent = p.toFixed(0);
-      }
-    } catch(e) { document.getElementById('skew-val').textContent = '—'; }
+      // Aktueller Preis via quote
+      const q = await fhFetch(`/quote?symbol=^${idx.fhSym}`);
+      const price = q.c; // current price
+      const prev  = q.pc; // previous close
 
-    // 2) 21-Tage MA: eine Batch-Anfrage für alle (time_series)
-    // TwelveData erlaubt batch time_series nur einzeln im Free Plan
-    // Stattdessen: SMA endpoint – 1 Request pro Index aber parallel
-    const weekKey = getWeekKey();
-    let weekCache = null;
-    try { weekCache = JSON.parse(localStorage.getItem(weekKey)); } catch(e) {}
-
-    const dailyPromises = MA_INDICES.map(async idx => {
-      try {
-        // Tages-SMA(21)
-        const exParam = idx.tdEx ? `&exchange=${idx.tdEx}` : '';
-        const rd = await fetch(`${TD}/sma?symbol=${idx.tdSym}${exParam}&interval=1day&time_period=21&outputsize=1&apikey=${TD_KEY}`);
-        const dd = await rd.json();
-
-        let currentPrice = null;
-        if (prices[idx.tdSym] && prices[idx.tdSym].price) {
-          currentPrice = parseFloat(prices[idx.tdSym].price);
-        } else if (prices.price && MA_INDICES.length === 1) {
-          currentPrice = parseFloat(prices.price);
-        }
-
-        if (dd.values && dd.values[0] && currentPrice) {
-          const sma = parseFloat(dd.values[0].sma);
-          const pct = ((currentPrice - sma) / sma) * 100;
-          renderMACell('ma-dly-' + idx.id, pct);
-        } else {
+      if (!price || price === 0) {
+        // Index-Symbol ohne ^ versuchen
+        const q2 = await fhFetch(`/quote?symbol=${idx.fhSym}`);
+        if (!q2.c || q2.c === 0) {
           document.getElementById('ma-dly-' + idx.id).textContent = '—';
+          document.getElementById('ma-wkly-' + idx.id).textContent = '—';
+          return;
         }
-
-        // Wochen-SMA(21) aus Cache oder neu laden
-        if (weekCache && weekCache[idx.id] !== undefined) {
-          renderMACell('ma-wkly-' + idx.id, weekCache[idx.id]);
-        } else {
-          const rw = await fetch(`${TD}/sma?symbol=${idx.tdSym}${exParam}&interval=1week&time_period=21&outputsize=1&apikey=${TD_KEY}`);
-          const dw = await rw.json();
-          if (dw.values && dw.values[0] && currentPrice) {
-            const smaW = parseFloat(dw.values[0].sma);
-            const pctW = ((currentPrice - smaW) / smaW) * 100;
-            renderMACell('ma-wkly-' + idx.id, pctW);
-            if (!weekCache) weekCache = {};
-            weekCache[idx.id] = pctW;
-          } else {
-            document.getElementById('ma-wkly-' + idx.id).textContent = '—';
-          }
-        }
-
-        // VIX Tagesveränderung
-        if (idx.id === 'vix' && currentPrice) {
-          try {
-            const rq = await fetch(`${TD}/quote?symbol=VIX&apikey=${TD_KEY}`);
-            const dq = await rq.json();
-            if (dq.previous_close) {
-              const prev = parseFloat(dq.previous_close);
-              const chg = ((currentPrice - prev) / prev * 100);
-              document.getElementById('vix-chg').textContent = (chg>=0?'+':'') + chg.toFixed(1) + '%';
-              document.getElementById('vix-chg').style.color = chg >= 0 ? 'var(--red)' : 'var(--green)';
-            }
-          } catch(e) {}
-        }
-
-      } catch(e) {
-        document.getElementById('ma-dly-' + idx.id).textContent = '—';
-        document.getElementById('ma-wkly-' + idx.id).textContent = '—';
       }
-    });
 
-    await Promise.all(dailyPromises);
-    if (weekCache) localStorage.setItem(weekKey, JSON.stringify(weekCache));
+      const currentPrice = price || 0;
+      const chg = prev ? ((currentPrice - prev) / prev * 100) : 0;
 
-  } catch(e) {
-    MA_INDICES.forEach(idx => {
-      const d = document.getElementById('ma-dly-' + idx.id);
-      const w = document.getElementById('ma-wkly-' + idx.id);
-      if (d) d.textContent = '—';
-      if (w) w.textContent = '—';
-    });
-  }
+      // VIX Summary updaten
+      if (idx.id === 'vix' && currentPrice) {
+        document.getElementById('s-vix').textContent = currentPrice.toFixed(1);
+        document.getElementById('vix-val').textContent = currentPrice.toFixed(2);
+        document.getElementById('vix-chg').textContent = (chg>=0?'+':'') + chg.toFixed(1) + '%';
+        document.getElementById('vix-chg').style.color = chg >= 0 ? 'var(--red)' : 'var(--green)';
+      }
+
+      // Tagesdaten: letzte 60 Tage für 21-Tage MA
+      const now = Math.floor(Date.now()/1000);
+      const from60 = now - 60*24*3600;
+      const cd = await fhFetch(`/stock/candle?symbol=^${idx.fhSym}&resolution=D&from=${from60}&to=${now}`);
+      if (cd.c && cd.c.length >= 21) {
+        const sma21d = calcSMA(cd.c, 21);
+        if (sma21d) renderMACell('ma-dly-' + idx.id, ((currentPrice - sma21d) / sma21d) * 100);
+        else document.getElementById('ma-dly-' + idx.id).textContent = '—';
+      } else {
+        document.getElementById('ma-dly-' + idx.id).textContent = '—';
+      }
+
+      // Wochendaten: aus Cache oder neu laden
+      if (weekCache && weekCache[idx.id] !== undefined) {
+        renderMACell('ma-wkly-' + idx.id, weekCache[idx.id]);
+      } else {
+        const from2y = now - 2*365*24*3600;
+        const cw = await fhFetch(`/stock/candle?symbol=^${idx.fhSym}&resolution=W&from=${from2y}&to=${now}`);
+        if (cw.c && cw.c.length >= 21) {
+          const sma21w = calcSMA(cw.c, 21);
+          if (sma21w) {
+            const pct = ((currentPrice - sma21w) / sma21w) * 100;
+            renderMACell('ma-wkly-' + idx.id, pct);
+            if (!weekCache) weekCache = {};
+            weekCache[idx.id] = pct;
+          }
+        } else {
+          document.getElementById('ma-wkly-' + idx.id).textContent = '—';
+        }
+      }
+
+    } catch(e) {
+      document.getElementById('ma-dly-' + idx.id).textContent = '—';
+      document.getElementById('ma-wkly-' + idx.id).textContent = '—';
+    }
+  });
+
+  await Promise.all(promises);
+  if (weekCache) localStorage.setItem(weekKey, JSON.stringify(weekCache));
+
+  // SKEW separat
+  try {
+    const qs = await fhFetch('/quote?symbol=^SKEW');
+    if (qs.c) {
+      document.getElementById('skew-val').textContent = qs.c.toFixed(1);
+      document.getElementById('s-skew').textContent = qs.c.toFixed(0);
+    }
+  } catch(e) { document.getElementById('skew-val').textContent = '—'; }
 }
 
 // ── SUMMARY ──────────────────────────────────────────────
